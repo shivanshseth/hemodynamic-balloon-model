@@ -1,7 +1,8 @@
 import numpy as np
 
 
-def balloonWindkessel(z, sampling_rate, alpha=0.32, kappa=0.65, gamma=0.41, tau=0.98, rho=0.34, V0=0.02):
+# def balloonWindkessel(z, sampling_rate,  z_mean_imp = 1, p = True, **kwargs):
+def balloonWindkessel(alpha, kappa, gamma, tau, rho, V0, z, sampling_rate, z_mean_imp = 1, p = True):
     """
     Computes the Balloon-Windkessel transformed BOLD signal
     Numerical method (for integration): Runge-Kutta 2nd order method (RK2)
@@ -20,13 +21,19 @@ def balloonWindkessel(z, sampling_rate, alpha=0.32, kappa=0.65, gamma=0.41, tau=
     v:          blood volume
     q:          deoxyhemoglobin content
     """
+    
+    # alpha = kwargs.get("alpha", 0.32)
+    # kappa = kwargs.get("kappa", 0.65)
+    # gamma = kwargs.get("gamma", 0.41)
+    # tau = kwargs.get("tau", 0.98)
+    # rho = kwargs.get("rho", 0.78)
+    # V0 = kwargs.get("V0", 0.02)
 
     if z.ndim==2:
         timepoints = z.shape[1]
     else:
         timepoints = len(z)
         z.shape = (1,len(z))
-
     dt = sampling_rate
 
     # Constants
@@ -55,17 +62,19 @@ def balloonWindkessel(z, sampling_rate, alpha=0.32, kappa=0.65, gamma=0.41, tau=
     BOLD[:,0] = y(q[:,0], v[:,0])
 
     ## Obtain mean value of z, and then calculate steady state of variables prior to performing HRF modeling
-    z_mean = np.mean(z,axis=1)
+    if z_mean_imp:
+        z_mean = np.mean(z,axis=1)
+    else: 
+        z_mean = 0
 
     # Run loop until an approximate steady state is reached 
     for t in range(timepoints-1):
     
         # 1st order increments (regular Euler)
-        #s_k1 = z_mean - (1.0/kappa)*s[:,t] - (1.0/gamma)*(f[:,t] - 1.0)
         s_k1 = z_mean - (kappa)*s[:,t] - (gamma)*(f[:,t] - 1.0)
         f_k1 = s[:,t]
-        v_k1 = (f[:,t] - v[:,t]**(1.0/alpha))/tau
-        q_k1 = (f[:,t]*E(f[:,t])/rho - (v[:,t]**(1.0/alpha)) * q[:,t]/v[:,t])/tau
+        v_k1 = (f[:,t] - np.power(v[:,t], (1.0/alpha)))/tau
+        q_k1 = (f[:,t]*E(f[:,t])/rho - (np.power(v[:,t], (1.0/alpha))) * q[:,t]/v[:,t])/tau
 
         # Compute intermediate values (Euler method)
         s_a = s[:,t] + s_k1*dt
@@ -77,8 +86,11 @@ def balloonWindkessel(z, sampling_rate, alpha=0.32, kappa=0.65, gamma=0.41, tau=
         #s_k2 = z_mean - (1.0/kappa)*s_a - (1.0/gamma)*(f_a - 1.0)
         s_k2 = z_mean - (kappa)*s_a - (gamma)*(f_a - 1.0)
         f_k2 = s_a
-        v_k2 = (f_a - v_a**(1.0/alpha))/tau
-        q_k2 = (f_a*E(f_a)/rho - (v_a**(1.0/alpha)) * q_a/v_a)/tau
+        if p:
+            print("time ", t, ':', v_a, q_a, 1.0/alpha)
+        v_k2 = (f_a - np.power(v_a, (1.0/alpha)))/tau
+        
+        q_k2 = (f_a*E(f_a)/rho - np.power(v_a, (1.0/alpha)) * q_a/v_a)/tau
 
         # Compute RK2 increment
         s[:,t+1] = s[:,t] + (.5*(s_k1+s_k2))*dt
@@ -105,8 +117,8 @@ def balloonWindkessel(z, sampling_rate, alpha=0.32, kappa=0.65, gamma=0.41, tau=
         #s_k1 = z[:,t] - (1.0/kappa)*s[:,t] - (1.0/gamma)*(f[:,t] - 1.0)
         s_k1 = z[:,t] - (kappa)*s[:,t] - (gamma)*(f[:,t] - 1.0)
         f_k1 = s[:,t]
-        v_k1 = (f[:,t] - v[:,t]**(1.0/alpha))/tau
-        q_k1 = (f[:,t]*E(f[:,t])/rho - (v[:,t]**(1.0/alpha)) * q[:,t]/v[:,t])/tau
+        v_k1 = (f[:,t] - np.power(v[:,t], (1.0/alpha)))/tau
+        q_k1 = (f[:,t]*E(f[:,t])/rho - np.power(v[:,t], (1.0/alpha)) * q[:,t]/v[:,t])/tau
 
         # Compute intermediate values (Euler method)
         s_a = s[:,t] + s_k1*dt
@@ -117,9 +129,11 @@ def balloonWindkessel(z, sampling_rate, alpha=0.32, kappa=0.65, gamma=0.41, tau=
         # 2nd order increments (RK2 method)
         #s_k2 = z[:,t+1] - (1.0/kappa)*s_a - (1.0/gamma)*(f_a - 1.0)
         s_k2 = z[:,t+1] - (kappa)*s_a - (gamma)*(f_a - 1.0)
+        if p:
+            print("in2 at time", t, ':', v_a, q_a, 1.0/alpha)
         f_k2 = s_a
-        v_k2 = (f_a - v_a**(1.0/alpha))/tau
-        q_k2 = (f_a*E(f_a)/rho - (v_a**(1.0/alpha)) * q_a/v_a)/tau
+        v_k2 = (f_a - np.power(v_a, 1.0/alpha))/tau
+        q_k2 = (f_a*E(f_a)/rho - np.power(v_a, 1.0/alpha) * q_a/v_a)/tau
 
         # Compute RK2 increment
         s[:,t+1] = s[:,t] + (.5*(s_k1+s_k2))*dt
